@@ -68,7 +68,7 @@ func MakeCommand(globalParamsGetter func() GlobalParams) *cobra.Command {
 			)
 		},
 	}
-	cmd.Flags().BoolVarP(&cliParams.localstore, "localstore", "v", false, "print autoscaling localstore debug info")
+	cmd.Flags().BoolVarP(&cliParams.localstore, "localstore", "l", false, "print autoscaling local fallback metrics store debug info")
 	return cmd
 }
 
@@ -152,7 +152,7 @@ func getLocalAutoscalingWorkloadCheck(w io.Writer, config config.Component) erro
 		return fmt.Errorf("failed to query the agent (running?): %s", err)
 	}
 
-	var response localautoscalingworkload.LocalAutoscalingWorkloadCheckResponse
+	var response localautoscalingworkload.LoadstoreMetricInfo
 
 	err = json.Unmarshal(r, &response)
 	if err != nil {
