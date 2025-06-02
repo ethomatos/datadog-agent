@@ -152,7 +152,7 @@ func getLocalAutoscalingWorkloadCheck(w io.Writer, config config.Component) erro
 		return fmt.Errorf("failed to query the agent (running?): %s", err)
 	}
 
-	var response localautoscalingworkload.LoadstoreMetricInfo
+	var response localautoscalingworkload.LocalWorkloadMetricStoreInfo
 
 	err = json.Unmarshal(r, &response)
 	if err != nil {
