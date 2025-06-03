@@ -17,13 +17,16 @@ from tasks.devcontainer import run_on_devcontainer
 from tasks.libs.ciproviders.ci_config import CILintersConfig
 from tasks.libs.ciproviders.github_api import GithubAPI
 from tasks.libs.ciproviders.gitlab_api import (
+    MultiGitlabCIDiff,
+    compute_gitlab_ci_config_diff,
     full_config_get_all_leaf_jobs,
     full_config_get_all_stages,
+    get_all_gitlab_ci_configurations,
 )
 from tasks.libs.common.check_tools_version import check_tools_version
 from tasks.libs.common.color import Color, color_message
 from tasks.libs.common.constants import GITHUB_REPO_NAME
-from tasks.libs.common.git import get_default_branch, get_file_modifications, get_staged_files
+from tasks.libs.common.git import get_common_ancestor, get_default_branch, get_file_modifications, get_staged_files
 from tasks.libs.common.utils import gitlab_section, is_pr_context, running_in_ci
 from tasks.libs.linter.gitlab import (
     _gitlab_ci_jobs_codeowners_lint,
@@ -240,6 +243,51 @@ def github_actions_shellcheck(
 
 # === GITLAB === #
 ## === Main linter tasks === ##
+@task
+def full_gitlab_ci(ctx, configs_file: str | None = None, diffs_file: str | None = None):
+    """
+    Top-level task for running all gitlabci-related linters
+
+    Having them all run from a single function like this prevents needing to regenerate the config at every step, which can take a while.
+    """
+    configs: dict[str, dict]
+    diff: MultiGitlabCIDiff
+
+    if diffs_file:
+        with open(diffs_file) as f:
+            diff = MultiGitlabCIDiff.from_dict(yaml.safe_load(f))
+            configs = diff.after  # type: ignore
+    elif configs_file:
+        with open(configs_file) as f:
+            configs = yaml.safe_load(f)
+
+        # We still need to generate the diff as some tasks require it
+        # TODO[@Ishirui]: Make all linting tasks able to take a configs object instead of a diff
+        before = get_common_ancestor(ctx, get_default_branch(), "HEAD")
+        root_file = next(iter(configs.keys()))  # We assume the first file specified in the configs is the root
+        before_configs = get_all_gitlab_ci_configurations(ctx, input_file=root_file, git_ref=before)
+        diff = MultiGitlabCIDiff.from_contents(before=before_configs, after=configs)
+    else:
+        _, configs, diff = compute_gitlab_ci_config_diff(ctx)
+
+    changed_jobs = extract_gitlab_ci_jobs(diff=diff)
+    all_jobs = extract_gitlab_ci_jobs(configs=configs)
+
+    lint_and_test_gitlab_ci_config(configs)
+    shellcheck_gitlab_ci_jobs(ctx, changed_jobs)
+    check_change_paths_gitlab_ci_jobs(changed_jobs)
+    check_change_paths_gitlab_ci_config(ctx, configs)
+
+    ci_linters_config = CILintersConfig(
+        lint=True,
+        all_jobs=full_config_get_all_leaf_jobs(configs),
+        all_stages=full_config_get_all_stages(configs),
+    )
+
+    check_needs_rules_gitlab_ci_jobs(changed_jobs, ci_linters_config)
+    check_owners_gitlab_ci_jobs(all_jobs, ci_linters_config)
+
+
 @task
 def gitlab_ci(ctx, configs_file: str | None = None, input_file=".gitlab-ci.yml", test="all", custom_context=None):
     """Lints Gitlab CI files in the datadog-agent repository.
