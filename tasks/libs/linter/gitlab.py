@@ -7,9 +7,81 @@ from invoke.exceptions import Exit
 
 from tasks.libs.ciproviders.gitlab_api import (
     MultiGitlabCIDiff,
+    get_preset_contexts,
     is_leaf_job,
+    load_context,
+    test_gitlab_configuration,
 )
 from tasks.libs.common.color import Color, color_message
+from tasks.libs.common.utils import gitlab_section
+from tasks.libs.linter.shell import DEFAULT_SHELLCHECK_EXCLUDES, flatten_script, shellcheck_linter
+
+
+# === Task code bodies === #
+def lint_and_test_gitlab_ci_config(
+    configs: dict[str, dict],
+    test="all",
+    custom_context=None,
+):
+    """Lints and tests the validity of the gitlabci config object passed in argument.
+
+    Args:
+        test: The context preset to test the gitlab ci file with containing environment variables.
+        custom_context: A custom context to test the gitlab ci file with.
+    """
+    for config_filename, config_object in configs.items():
+        with gitlab_section(f"Testing {config_filename}", echo=True):
+            # Only the main config should be tested with all contexts
+            if config_filename == ".gitlab-ci.yml":
+                all_contexts = []
+                if custom_context:
+                    all_contexts = load_context(custom_context)
+                else:
+                    all_contexts = get_preset_contexts(test)
+
+                print(f'{color_message("info", Color.BLUE)}: We will test {len(all_contexts)} contexts')
+                for context in all_contexts:
+                    print("Test gitlab configuration with context: ", context)
+                    test_gitlab_configuration(
+                        entry_point=config_filename, config_object=config_object, context=dict(context)
+                    )
+            else:
+                test_gitlab_configuration(entry_point=config_filename, config_object=config_object)
+
+
+def shellcheck_gitlab_ci_jobs(
+    ctx,
+    jobs: list[tuple[str, dict]],
+    exclude=DEFAULT_SHELLCHECK_EXCLUDES,
+    verbose: bool = False,
+    shellcheck_args="",
+    fail_fast: bool = False,
+    use_bat: str | None = None,
+    only_errors: bool = False,
+):
+    scripts = {}
+    for job, content in jobs:
+        # Skip jobs that are not executed
+        if not is_leaf_job(job, content):
+            continue
+
+        # Shellcheck is only for bash like scripts
+        is_powershell = any(
+            'powershell' in flatten_script(content.get(keyword, ''))
+            for keyword in ('before_script', 'script', 'after_script')
+        )
+        if is_powershell:
+            continue
+
+        if verbose:
+            print('Verifying job:', job)
+
+        # Lint scripts
+        for keyword in ('before_script', 'script', 'after_script'):
+            if keyword in content:
+                scripts[f'{job}.{keyword}'] = f'#!/bin/bash\n{flatten_script(content[keyword]).strip()}\n'
+
+    shellcheck_linter(ctx, scripts, exclude, shellcheck_args, fail_fast, use_bat, only_errors)
 
 
 class SSMParameterCall:
