@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import re
+import sys
+from collections import defaultdict
+from glob import glob
 from typing import Any
 
 from invoke.exceptions import Exit
 
+from tasks.libs.ciproviders.ci_config import CILintersConfig
 from tasks.libs.ciproviders.gitlab_api import (
     MultiGitlabCIDiff,
     get_preset_contexts,
     is_leaf_job,
     load_context,
+    read_includes,
+    retrieve_all_paths,
     test_gitlab_configuration,
 )
 from tasks.libs.common.color import Color, color_message
@@ -82,6 +88,212 @@ def shellcheck_gitlab_ci_jobs(
                 scripts[f'{job}.{keyword}'] = f'#!/bin/bash\n{flatten_script(content[keyword]).strip()}\n'
 
     shellcheck_linter(ctx, scripts, exclude, shellcheck_args, fail_fast, use_bat, only_errors)
+
+
+def check_change_paths_gitlab_ci_jobs(jobs: list[tuple[str, dict]]):
+    """Verifies that rules: changes: paths in the given jobs match existing files in the repo"""
+    error_paths = []
+    for _, job in jobs:
+        for path in set(retrieve_all_paths(job)):
+            files = glob(path, recursive=True)
+            if len(files) == 0:
+                error_paths.append(path)
+    if error_paths:
+        raise Exit(
+            f"{color_message('No files found for paths', Color.RED)}:\n{chr(10).join(' - ' + path for path in error_paths)}"
+        )
+
+
+def check_change_paths_gitlab_ci_config(ctx, configs: dict[str, dict], job_files: list[str] | None = None):
+    """Verifies that the jobs defined within job_files contain a change path rule in the given config."""
+    tests_without_change_path_allow_list = {
+        'generate-fips-e2e-pipeline',
+        'generate-flakes-finder-pipeline',
+        'k8s-e2e-cspm-dev',
+        'k8s-e2e-cspm-main',
+        'k8s-e2e-otlp-dev',
+        'k8s-e2e-otlp-main',
+        'new-e2e-agent-platform-install-script-amazonlinux-a6-arm64',
+        'new-e2e-agent-platform-install-script-amazonlinux-a6-x86_64',
+        'new-e2e-agent-platform-install-script-amazonlinux-a7-arm64',
+        'new-e2e-agent-platform-install-script-amazonlinux-a7-x64',
+        'new-e2e-agent-platform-install-script-centos-a6-x86_64',
+        'new-e2e-agent-platform-install-script-centos-a7-x86_64',
+        'new-e2e-agent-platform-install-script-centos-dogstatsd-a7-x86_64',
+        'new-e2e-agent-platform-install-script-centos-fips-a6-x86_64',
+        'new-e2e-agent-platform-install-script-centos-fips-a7-x86_64',
+        'new-e2e-agent-platform-install-script-centos-fips-dogstatsd-a7-x86_64',
+        'new-e2e-agent-platform-install-script-centos-fips-iot-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-centos-iot-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-debian-a6-arm64',
+        'new-e2e-agent-platform-install-script-debian-a6-x86_64',
+        'new-e2e-agent-platform-install-script-debian-a7-arm64',
+        'new-e2e-agent-platform-install-script-debian-a7-x86_64',
+        'new-e2e-agent-platform-install-script-debian-dogstatsd-a7-x86_64',
+        'new-e2e-agent-platform-install-script-debian-heroku-agent-a6-x86_64',
+        'new-e2e-agent-platform-install-script-debian-heroku-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-debian-iot-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-suse-a6-x86_64',
+        'new-e2e-agent-platform-install-script-suse-a7-arm64',
+        'new-e2e-agent-platform-install-script-suse-a7-x86_64',
+        'new-e2e-agent-platform-install-script-suse-dogstatsd-a7-x86_64',
+        'new-e2e-agent-platform-install-script-suse-iot-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-a6-arm64',
+        'new-e2e-agent-platform-install-script-ubuntu-a6-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-a7-arm64',
+        'new-e2e-agent-platform-install-script-ubuntu-a7-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-dogstatsd-a7-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-heroku-agent-a6-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-heroku-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-ubuntu-iot-agent-a7-x86_64',
+        'new-e2e-agent-platform-install-script-docker',
+        'new-e2e-agent-platform-install-script-upgrade6-amazonlinux-x64',
+        'new-e2e-agent-platform-install-script-upgrade6-centos-fips-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade6-centos-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade6-debian-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade6-suse-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade6-ubuntu-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-amazonlinux-iot-agent-x64',
+        'new-e2e-agent-platform-install-script-upgrade7-amazonlinux-x64',
+        'new-e2e-agent-platform-install-script-upgrade7-centos-fips-iot-agent-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-centos-fips-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-centos-iot-agent-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-centos-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-debian-iot-agent-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-debian-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-suse-iot-agent-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-suse-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-ubuntu-iot-agent-x86_64',
+        'new-e2e-agent-platform-install-script-upgrade7-ubuntu-x86_64',
+        'new-e2e-agent-platform-rpm-centos6-a7-x86_64',
+        'new-e2e-agent-platform-step-by-step-amazonlinux-a6-arm64',
+        'new-e2e-agent-platform-step-by-step-amazonlinux-a6-x86_64',
+        'new-e2e-agent-platform-step-by-step-amazonlinux-a7-arm64',
+        'new-e2e-agent-platform-step-by-step-amazonlinux-a7-x64',
+        'new-e2e-agent-platform-step-by-step-centos-a6-x86_64',
+        'new-e2e-agent-platform-step-by-step-centos-a7-x86_64',
+        'new-e2e-agent-platform-step-by-step-debian-a6-arm64',
+        'new-e2e-agent-platform-step-by-step-debian-a6-x86_64',
+        'new-e2e-agent-platform-step-by-step-debian-a7-arm64',
+        'new-e2e-agent-platform-step-by-step-debian-a7-x64',
+        'new-e2e-agent-platform-step-by-step-suse-a6-x86_64',
+        'new-e2e-agent-platform-step-by-step-suse-a7-arm64',
+        'new-e2e-agent-platform-step-by-step-suse-a7-x86_64',
+        'new-e2e-agent-platform-step-by-step-ubuntu-a6-arm64',
+        'new-e2e-agent-platform-step-by-step-ubuntu-a6-x86_64',
+        'new-e2e-agent-platform-step-by-step-ubuntu-a7-arm64',
+        'new-e2e-agent-platform-step-by-step-ubuntu-a7-x86_64',
+        'new-e2e-agent-runtimes',
+        'new-e2e-agent-configuration',
+        'new-e2e-cws',
+        'new-e2e-language-detection',
+        'new-e2e-npm-docker',
+        'new-e2e-eks-cleanup',
+        'new-e2e-npm-packages',
+        'new-e2e-orchestrator',
+        'new-e2e-package-signing-amazonlinux-a6-x86_64',
+        'new-e2e-package-signing-debian-a7-x86_64',
+        'new-e2e-package-signing-suse-a7-x86_64',
+        'new-e2e_windows_powershell_module_test',
+        'new-e2e-eks-cleanup-on-failure',
+        'trigger-flakes-finder',
+        'trigger-fips-e2e',
+    }
+
+    # Fetch all test jobs
+    job_files = job_files or (['.gitlab/e2e/e2e.yml'] + list(glob('.gitlab/e2e/install_packages/*.yml')))
+    test_config = read_includes(ctx, job_files, return_config=True, add_file_path=True)
+    tests = [(test, data['_file_path']) for test, data in test_config.items() if test[0] != '.']
+
+    def contains_valid_change_rule(rule):
+        """Verifies that the job rule contains the required change path configuration."""
+
+        if 'changes' not in rule or 'paths' not in rule['changes']:
+            return False
+
+        # The change paths should be more than just test files
+        return any(
+            not path.startswith(('test/', './test/', 'test\\', '.\\test\\')) for path in rule['changes']['paths']
+        )
+
+        # Verify that all tests contain a change path rule
+
+    tests_without_change_path = defaultdict(list)
+    tests_without_change_path_allowed = defaultdict(list)
+    for test, filepath in tests:
+        for entry_point, config in configs.items():
+            if test not in config:
+                continue
+            if "rules" in config[test] and not any(
+                contains_valid_change_rule(rule) for rule in config[test]['rules'] if isinstance(rule, dict)
+            ):
+                if test in tests_without_change_path_allow_list:
+                    tests_without_change_path_allowed[f"{filepath} ({entry_point})"].append(test)
+                else:
+                    tests_without_change_path[f"{filepath} ({entry_point})"].append(test)
+
+    if len(tests_without_change_path_allowed) != 0:
+        with gitlab_section('Allow-listed jobs', collapsed=True):
+            print(
+                color_message(
+                    'warning: The following tests do not contain required change paths rule but are allowed:',
+                    Color.ORANGE,
+                )
+            )
+            for filepath_and_entrypoint, tests in tests_without_change_path_allowed.items():
+                print(f"- {color_message(filepath_and_entrypoint, Color.BLUE)}: {', '.join(tests)}")
+            print(color_message('warning: End of allow-listed jobs', Color.ORANGE))
+            print()
+
+    if len(tests_without_change_path) != 0:
+        print(color_message("error: Tests without required change paths rule:", "red"), file=sys.stderr)
+        for filepath_and_entrypoint, tests in tests_without_change_path.items():
+            print(f"- {color_message(filepath_and_entrypoint, Color.BLUE)}: {', '.join(tests)}", file=sys.stderr)
+
+        raise RuntimeError(
+            color_message(
+                'Some tests do not contain required change paths rule, they must contain at least one non-test path.',
+                Color.RED,
+            )
+        )
+
+    print(color_message("success: All tests contain a change paths rule or are allow-listed", "green"))
+
+
+def check_needs_rules_gitlab_ci_jobs(jobs: list[tuple[str, dict]], ci_linters_config: CILintersConfig):
+    """Verifies that the specified jobs contain `needs` and also `rules`."""
+    # Verify the jobs
+    error_jobs = []
+    n_ignored = 0
+    for job, contents in jobs:
+        error = "needs" not in contents or "rules" not in contents
+        to_ignore = (
+            job in ci_linters_config.needs_rules_jobs or contents['stage'] in ci_linters_config.needs_rules_stages
+        )
+
+        if to_ignore:
+            if error:
+                n_ignored += 1
+            continue
+
+        if error:
+            error_jobs.append((job, contents['stage']))
+
+    if n_ignored:
+        print(
+            f'{color_message("Info", Color.BLUE)}: {n_ignored} ignored jobs (jobs / stages defined in {ci_linters_config.path}:needs-rules)'
+        )
+
+    if error_jobs:
+        error_jobs = sorted(error_jobs)
+        error_jobs = '\n'.join(f'- {job} ({stage} stage)' for job, stage in error_jobs)
+
+        raise Exit(
+            f"{color_message('Error', Color.RED)}: The following jobs are missing 'needs' or 'rules' section:\n{error_jobs}\nJobs should have needs and rules, see https://datadoghq.atlassian.net/wiki/spaces/ADX/pages/4059234597/Gitlab+CI+configuration+guidelines#datadog-agent for details.\nIf you really want to have a job without needs / rules, you can add it to {ci_linters_config.path}",
+            code=1,
+        )
+    else:
+        print(f'{color_message("Success", Color.GREEN)}: All jobs have "needs" and "rules"')
 
 
 class SSMParameterCall:
