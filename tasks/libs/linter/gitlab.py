@@ -303,7 +303,7 @@ def check_needs_rules_gitlab_ci_jobs(jobs: list[tuple[str, dict]], ci_linters_co
 def check_owners_gitlab_ci_jobs(
     jobs: list[tuple[str, dict]],
     ci_linters_config: CILintersConfig,
-    path_jobowners: str,
+    path_jobowners: str = '.gitlab/JOBOWNERS',
 ):
     jobowners = read_owners(path_jobowners, remove_default_pattern=True)
     job_names = [name for (name, _) in jobs]
@@ -417,9 +417,13 @@ def extract_gitlab_ci_jobs(
         If `only_names` is True, it will be a simple list of all the job names.
     """
     # Dict of entrypoint -> config object, of the format returned by `get_all_gitlab_ci_configurations`
-    assert (configs or diff) and not (configs and diff), "Please pass exactly one of a config object or a diff object"
 
-    if diff:
+    # Unfortunately a MultiGitlabCIDiff is not always truthy (see its __bool__), so we have to check explicitely
+    assert (configs is not None or diff is not None) and not (configs is not None and diff is not None), (
+        "Please pass exactly one of a config object or a diff object"
+    )
+
+    if diff is not None:
         jobs = [(job, contents) for _, job, contents, _ in diff.iter_jobs(added=True, modified=True, only_leaves=True)]
     else:
         jobs = [
