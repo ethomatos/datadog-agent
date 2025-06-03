@@ -21,6 +21,7 @@ from tasks.libs.ciproviders.gitlab_api import (
 from tasks.libs.common.color import Color, color_message
 from tasks.libs.common.utils import gitlab_section
 from tasks.libs.linter.shell import DEFAULT_SHELLCHECK_EXCLUDES, flatten_script, shellcheck_linter
+from tasks.libs.owners.parsing import read_owners
 
 
 # === Task code bodies === #
@@ -296,6 +297,37 @@ def check_needs_rules_gitlab_ci_jobs(jobs: list[tuple[str, dict]], ci_linters_co
         print(f'{color_message("Success", Color.GREEN)}: All jobs have "needs" and "rules"')
 
 
+def check_owners_gitlab_ci_jobs(
+    jobs: list[tuple[str, dict]],
+    ci_linters_config: CILintersConfig,
+    path_jobowners: str,
+):
+    jobowners = read_owners(path_jobowners, remove_default_pattern=True)
+    job_names = [name for (name, _) in jobs]
+    error_jobs = []
+    n_ignored = 0
+    for job in job_names:
+        owners = [name for (kind, name) in jobowners.of(job) if kind == 'TEAM']
+        if not owners:
+            if job in ci_linters_config.job_owners_jobs:
+                n_ignored += 1
+            else:
+                error_jobs.append(job)
+
+    if n_ignored:
+        print(
+            f'{color_message("Info", Color.BLUE)}: {n_ignored} ignored jobs (jobs defined in {ci_linters_config.path}:job-owners)'
+        )
+
+    if error_jobs:
+        error_jobs = '\n'.join(f'- {job}' for job in sorted(error_jobs))
+        raise Exit(
+            f"{color_message('Error', Color.RED)}: These jobs are not defined in {path_jobowners}:\n{error_jobs}"
+        )
+
+    print(f'{color_message("Success", Color.GREEN)}: All jobs have owners defined in {path_jobowners}')
+
+
 class SSMParameterCall:
     def __init__(self, file, line_nb, with_wrapper=False, with_env_var=False):
         """
@@ -380,31 +412,6 @@ def extract_gitlab_ci_jobs(
         return []
 
     return jobs
-
-
-def _gitlab_ci_jobs_owners_lint(jobs, jobowners, ci_linters_config, path_jobowners):
-    error_jobs = []
-    n_ignored = 0
-    for job in jobs:
-        owners = [name for (kind, name) in jobowners.of(job) if kind == 'TEAM']
-        if not owners:
-            if job in ci_linters_config.job_owners_jobs:
-                n_ignored += 1
-            else:
-                error_jobs.append(job)
-
-    if n_ignored:
-        print(
-            f'{color_message("Info", Color.BLUE)}: {n_ignored} ignored jobs (jobs defined in {ci_linters_config.path}:job-owners)'
-        )
-
-    if error_jobs:
-        error_jobs = '\n'.join(f'- {job}' for job in sorted(error_jobs))
-        raise Exit(
-            f"{color_message('Error', Color.RED)}: These jobs are not defined in {path_jobowners}:\n{error_jobs}"
-        )
-    else:
-        print(f'{color_message("Success", Color.GREEN)}: All jobs have owners defined in {path_jobowners}')
 
 
 def _gitlab_ci_jobs_codeowners_lint(path_codeowners, modified_yml_files, gitlab_owners):

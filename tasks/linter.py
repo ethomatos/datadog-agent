@@ -30,10 +30,10 @@ from tasks.libs.common.git import get_default_branch, get_file_modifications, ge
 from tasks.libs.common.utils import gitlab_section, is_pr_context, running_in_ci
 from tasks.libs.linter.gitlab import (
     _gitlab_ci_jobs_codeowners_lint,
-    _gitlab_ci_jobs_owners_lint,
     check_change_paths_gitlab_ci_config,
     check_change_paths_gitlab_ci_jobs,
     check_needs_rules_gitlab_ci_jobs,
+    check_owners_gitlab_ci_jobs,
     extract_gitlab_ci_jobs,
     lint_and_test_gitlab_ci_config,
     list_get_parameter_calls,
@@ -41,7 +41,6 @@ from tasks.libs.linter.gitlab import (
 )
 from tasks.libs.linter.go import run_lint_go
 from tasks.libs.linter.shell import DEFAULT_SHELLCHECK_EXCLUDES, shellcheck_linter
-from tasks.libs.owners.parsing import read_owners
 from tasks.libs.types.copyright import CopyrightLinter, LintFailure
 from tasks.test_core import process_input_args, process_result
 from tasks.update_go import _update_go_mods, _update_references
@@ -519,7 +518,6 @@ def gitlab_ci_jobs_owners(ctx, diff_file=None, path_jobowners='.gitlab/JOBOWNERS
         return
 
     full_config: dict[str, dict] = diff.after  # type: ignore
-    job_names = [name for (name, _) in jobs]
 
     ci_linters_config = CILintersConfig(
         lint=True,
@@ -527,9 +525,7 @@ def gitlab_ci_jobs_owners(ctx, diff_file=None, path_jobowners='.gitlab/JOBOWNERS
         all_stages=full_config_get_all_stages(full_config),
     )
 
-    jobowners = read_owners(path_jobowners, remove_default_pattern=True)
-
-    _gitlab_ci_jobs_owners_lint(job_names, jobowners, ci_linters_config, path_jobowners)
+    check_owners_gitlab_ci_jobs(jobs, ci_linters_config, path_jobowners)
 
 
 # === MISC === #
