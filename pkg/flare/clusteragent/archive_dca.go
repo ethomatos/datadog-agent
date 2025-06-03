@@ -79,16 +79,17 @@ func createDCAArchive(fb flaretypes.FlareBuilder, confSearchPaths map[string]str
 	getMetadataMap(fb)               //nolint:errcheck
 	getClusterAgentClusterChecks(fb) //nolint:errcheck
 
-	fb.AddFileFromFunc("agent-daemonset.yaml", getAgentDaemonSet)                     //nolint:errcheck
-	fb.AddFileFromFunc("cluster-agent-deployment.yaml", getClusterAgentDeployment)    //nolint:errcheck
-	fb.AddFileFromFunc("helm-values.yaml", getHelmValues)                             //nolint:errcheck
-	fb.AddFileFromFunc("datadog-agent-cr.yaml", getDatadogAgentManifest)              //nolint:errcheck
-	fb.AddFileFromFunc("envvars.log", flarecommon.GetEnvVars)                         //nolint:errcheck
-	fb.AddFileFromFunc("telemetry.log", QueryDCAMetrics)                              //nolint:errcheck
-	fb.AddFileFromFunc("autoscaler-list.json", getDCAAutoscalerList)                  //nolint:errcheck
-	fb.AddFileFromFunc("tagger-list.json", getDCATaggerList)                          //nolint:errcheck
-	fb.AddFileFromFunc("workload-list.log", getDCAWorkloadList)                       //nolint:errcheck
-	fb.AddFileFromFunc("cluster-agent-metadata.json", getClusterAgentMetadataPayload) //nolint:errcheck
+	fb.AddFileFromFunc("agent-daemonset.yaml", getAgentDaemonSet)                          //nolint:errcheck
+	fb.AddFileFromFunc("cluster-agent-deployment.yaml", getClusterAgentDeployment)         //nolint:errcheck
+	fb.AddFileFromFunc("helm-values.yaml", getHelmValues)                                  //nolint:errcheck
+	fb.AddFileFromFunc("datadog-agent-cr.yaml", getDatadogAgentManifest)                   //nolint:errcheck
+	fb.AddFileFromFunc("envvars.log", flarecommon.GetEnvVars)                              //nolint:errcheck
+	fb.AddFileFromFunc("telemetry.log", QueryDCAMetrics)                                   //nolint:errcheck
+	fb.AddFileFromFunc("autoscaler-list.json", getDCAAutoscalerList)                       //nolint:errcheck
+	fb.AddFileFromFunc("local-autoscaling-check.json", getDCALocalAutoscalingWorkloadList) //nolint:errcheck
+	fb.AddFileFromFunc("tagger-list.json", getDCATaggerList)                               //nolint:errcheck
+	fb.AddFileFromFunc("workload-list.log", getDCAWorkloadList)                            //nolint:errcheck
+	fb.AddFileFromFunc("cluster-agent-metadata.json", getClusterAgentMetadataPayload)      //nolint:errcheck
 	getPerformanceProfileDCA(fb, pdata)
 
 	if pkgconfigsetup.Datadog().GetBool("external_metrics_provider.enabled") {
@@ -236,6 +237,30 @@ func getDCAAutoscalerList() ([]byte, error) {
 
 	c := util.GetClient()
 	r, err := util.DoGet(c, autoscalerListURL, util.CloseConnection)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pretty print JSON output
+	var b bytes.Buffer
+	writer := bufio.NewWriter(&b)
+	err = json.Indent(&b, r, "", "\t")
+	if err != nil {
+		return r, nil
+	}
+	writer.Flush()
+	return b.Bytes(), nil
+}
+
+func getDCALocalAutoscalingWorkloadList() ([]byte, error) {
+	ipcAddress, err := pkgconfigsetup.GetIPCAddress(pkgconfigsetup.Datadog())
+	if err != nil {
+		return nil, err
+	}
+	localAutoscalingWorkloadListURL := fmt.Sprintf("https://%v:%v/local-autoscaling-check", ipcAddress, pkgconfigsetup.Datadog().GetInt("cluster_agent.cmd_port"))
+
+	c := util.GetClient()
+	r, err := util.DoGet(c, localAutoscalingWorkloadListURL, util.CloseConnection)
 	if err != nil {
 		return nil, err
 	}
