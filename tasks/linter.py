@@ -243,12 +243,38 @@ def github_actions_shellcheck(
 
 # === GITLAB === #
 ## === Main linter tasks === ##
-@task
-def full_gitlab_ci(ctx, configs_file: str | None = None, diffs_file: str | None = None):
+@task(iterable=["job_files"])
+def full_gitlab_ci(
+    ctx,
+    configs_file: str | None = None,
+    diffs_file: str | None = None,
+    *,
+    test: str = "all",
+    custom_context: str = "",
+    shellcheck_exclude: str = "",
+    shellcheck_verbose: bool = False,
+    shellcheck_args: str = "",
+    shellcheck_fail_fast: bool = False,
+    shellcheck_use_bat: str | None = None,
+    shellcheck_only_errors: bool = False,
+    job_files: list[str] | None = None,
+    path_jobowners: str = '.gitlab/JOBOWNERS',
+):
     """
     Top-level task for running all gitlabci-related linters
 
     Having them all run from a single function like this prevents needing to regenerate the config at every step, which can take a while.
+
+    Args:
+        test: The context preset to test the gitlab ci with containing environment variables.
+        custom_context: A custom context to test the gitlab ci config with.
+        shellcheck_exclude: A comma separated list of shellcheck error codes to exclude.
+        shellcheck_shellcheck_args: Additional arguments to pass to shellcheck.
+        shellcheck_fail_fast: If True, will stop at the first shellcheck error.
+        shellcheck_use_bat: If True (or None), will (try to) use bat to display the shellcheck results.
+        shellcheck_only_errors: Show only shellcheck errors, not warnings.
+        job_files: Job files for which to check existence of `change: paths:` rules
+        path_jobowners: Path to a JOBOWNERS file defining which jobs are owned by which teams
     """
     configs: dict[str, dict]
     diff: MultiGitlabCIDiff
@@ -273,10 +299,19 @@ def full_gitlab_ci(ctx, configs_file: str | None = None, diffs_file: str | None 
     changed_jobs = extract_gitlab_ci_jobs(diff=diff)
     all_jobs = extract_gitlab_ci_jobs(configs=configs)
 
-    lint_and_test_gitlab_ci_config(configs)
-    shellcheck_gitlab_ci_jobs(ctx, changed_jobs)
+    lint_and_test_gitlab_ci_config(configs, test=test, custom_context=custom_context)
+    shellcheck_gitlab_ci_jobs(
+        ctx,
+        changed_jobs,
+        exclude=shellcheck_exclude,
+        verbose=shellcheck_verbose,
+        shellcheck_args=shellcheck_args,
+        fail_fast=shellcheck_fail_fast,
+        use_bat=shellcheck_use_bat,
+        only_errors=shellcheck_only_errors,
+    )
     check_change_paths_gitlab_ci_jobs(changed_jobs)
-    check_change_paths_gitlab_ci_config(ctx, configs)
+    check_change_paths_gitlab_ci_config(ctx, configs, job_files=job_files)
 
     ci_linters_config = CILintersConfig(
         lint=True,
@@ -285,7 +320,7 @@ def full_gitlab_ci(ctx, configs_file: str | None = None, diffs_file: str | None 
     )
 
     check_needs_rules_gitlab_ci_jobs(changed_jobs, ci_linters_config)
-    check_owners_gitlab_ci_jobs(all_jobs, ci_linters_config)
+    check_owners_gitlab_ci_jobs(all_jobs, ci_linters_config, path_jobowners=path_jobowners)
 
 
 @task
