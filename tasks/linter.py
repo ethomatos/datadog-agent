@@ -41,6 +41,7 @@ from tasks.libs.linter.gitlab import (
     load_or_generate_gitlab_ci_diff,
     shellcheck_gitlab_ci_jobs,
 )
+from tasks.libs.linter.gitlab_exceptions import GitlabLintFailure, MultiGitlabLintFailure
 from tasks.libs.linter.go import run_lint_go
 from tasks.libs.linter.shell import DEFAULT_SHELLCHECK_EXCLUDES, shellcheck_linter
 from tasks.libs.types.copyright import CopyrightLinter, LintFailure
@@ -339,7 +340,14 @@ def gitlab_ci(ctx, configs_file: str | None = None, input_file=".gitlab-ci.yml",
     configs = load_or_generate_gitlab_ci_configs(
         ctx, configs_file, input_file=input_file, resolve_only_includes=True, postprocess_options=False
     )
-    lint_and_test_gitlab_ci_config(configs, test=test, custom_context=custom_context)
+    try:
+        lint_and_test_gitlab_ci_config(configs, test=test, custom_context=custom_context)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        # If we have a failure, we print the details and exit with an error code
+        print(e.pretty_print())
+        sys.exit(1)
+
+    print(f'[{color_message("OK", Color.GREEN)}] All contexts tested successfully.')
 
 
 @task
@@ -537,7 +545,7 @@ def gitlab_ci_jobs_codeowners(ctx, path_codeowners='.github/CODEOWNERS', all_fil
         modified_yml_files = [path for path in modified_yml_files if fnmatch(path, '.gitlab/**.yml')]
 
     if not modified_yml_files:
-        print(f'{color_message("Info", Color.BLUE)}: No added / modified job files, skipping lint')
+        print(f'[{color_message("INFO", Color.BLUE)}] No added / modified job files, skipping lint')
         return
 
     with open(path_codeowners) as f:

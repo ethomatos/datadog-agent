@@ -47,7 +47,7 @@ def lint_and_test_gitlab_ci_config(
                 else:
                     all_contexts = get_preset_contexts(test)
 
-                print(f'{color_message("info", Color.BLUE)}: We will test {len(all_contexts)} contexts')
+                print(f'[{color_message("INFO", Color.BLUE)}] We will test {len(all_contexts)} contexts')
                 for context in all_contexts:
                     print("Test gitlab configuration with context: ", context)
                     test_gitlab_configuration(
@@ -287,7 +287,7 @@ def check_needs_rules_gitlab_ci_jobs(jobs: list[tuple[str, dict]], ci_linters_co
 
     if n_ignored:
         print(
-            f'{color_message("Info", Color.BLUE)}: {n_ignored} ignored jobs (jobs / stages defined in {ci_linters_config.path}:needs-rules)'
+            f'[{color_message("INFO", Color.BLUE)}] {n_ignored} ignored jobs (jobs / stages defined in {ci_linters_config.path}:needs-rules)'
         )
 
     if error_jobs:
@@ -299,7 +299,7 @@ def check_needs_rules_gitlab_ci_jobs(jobs: list[tuple[str, dict]], ci_linters_co
             code=1,
         )
     else:
-        print(f'{color_message("Success", Color.GREEN)}: All jobs have "needs" and "rules"')
+        print(f'[{color_message("OK", Color.GREEN)}] All jobs have "needs" and "rules"')
 
 
 def check_owners_gitlab_ci_jobs(
@@ -321,7 +321,7 @@ def check_owners_gitlab_ci_jobs(
 
     if n_ignored:
         print(
-            f'{color_message("Info", Color.BLUE)}: {n_ignored} ignored jobs (jobs defined in {ci_linters_config.path}:job-owners)'
+            f'[{color_message("INFO", Color.BLUE)}] {n_ignored} ignored jobs (jobs defined in {ci_linters_config.path}:job-owners)'
         )
 
     if error_jobs:
@@ -330,7 +330,7 @@ def check_owners_gitlab_ci_jobs(
             f"{color_message('Error', Color.RED)}: These jobs are not defined in {path_jobowners}:\n{error_jobs}"
         )
 
-    print(f'{color_message("Success", Color.GREEN)}: All jobs have owners defined in {path_jobowners}')
+    print(f'[{color_message("OK", Color.GREEN)}] All jobs have owners defined in {path_jobowners}')
 
 
 # === Task-specific helpers === #
@@ -400,7 +400,7 @@ def _gitlab_ci_jobs_codeowners_lint(path_codeowners, modified_yml_files, gitlab_
             f"{color_message('Error', Color.RED)}: These files should have specific CODEOWNERS rules within {path_codeowners} starting with '/.gitlab/<stage_name>'):\n{error_files}"
         )
     else:
-        print(f'{color_message("Success", Color.GREEN)}: All files have CODEOWNERS rules within {path_codeowners}')
+        print(f'[{color_message("OK", Color.GREEN)}] All files have CODEOWNERS rules within {path_codeowners}')
 
 
 # === "Plumbing" methods === #
@@ -436,7 +436,7 @@ def extract_gitlab_ci_jobs(
         ]
 
     if not jobs:
-        print(f"{color_message('Info', Color.BLUE)}: No added / modified jobs, skipping lint")
+        print(f'[{color_message("INFO", Color.BLUE)}] No added / modified job files, skipping lint')
         return []
 
     return jobs
