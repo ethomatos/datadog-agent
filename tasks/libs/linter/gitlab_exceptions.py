@@ -53,6 +53,10 @@ class GitlabLintFailure(Exception):
 
         return f'[{level_out}] {entrypoint_job} : {self.details}'
 
+    @property
+    def exit_code(self) -> int:
+        return 0 if self.level == FailureLevel.WARNING else 1
+
 
 @dataclass
 class MultiGitlabLintFailure(Exception):
@@ -84,3 +88,7 @@ class MultiGitlabLintFailure(Exception):
     @property
     def entry_points(self) -> set[str]:
         return {failure.entry_point for failure in self.failures if failure.entry_point}
+
+    @property
+    def exit_code(self) -> int:
+        return 0 if self.level == FailureLevel.WARNING else 1

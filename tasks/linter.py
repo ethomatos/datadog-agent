@@ -340,8 +340,7 @@ def gitlab_ci(ctx, configs_file: str | None = None, input_file=".gitlab-ci.yml",
         lint_and_test_gitlab_ci_config(configs, test=test, custom_context=custom_context)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        # TODO[@Ishirui]: Don't exit when only warnings are found
-        sys.exit(1)
+        sys.exit(e.exit_code)
 
     print(f'[{color_message("OK", Color.GREEN)}] All contexts tested successfully.')
 
@@ -386,7 +385,7 @@ def gitlab_ci_shellcheck(
         )
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(f'[{color_message("OK", Color.GREEN)}] Shellcheck passed for all gitlab ci jobs.')
 
 
@@ -476,7 +475,7 @@ def gitlab_change_paths(ctx, diff_file=None):
         check_change_paths_valid_gitlab_ci_jobs(jobs)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(
         f"[{color_message('OK', Color.GREEN)}] All rule:changes:paths from gitlab-ci are {color_message('valid', Color.GREEN)}."
     )
@@ -513,7 +512,7 @@ def gitlab_ci_jobs_needs_rules(ctx, diff_file=None):
         check_needs_rules_gitlab_ci_jobs(jobs, ci_linters_config)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(f'[{color_message("OK", Color.GREEN)}] All checked jobs haeve a `needs` and `rules` tag.')
 
 
@@ -537,7 +536,7 @@ def job_change_path(ctx, configs_file: str | None = None, job_pattern: str = ".*
         check_change_paths_exist_gitlab_ci_jobs(jobs)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(f'[{color_message("OK", Color.GREEN)}] All jobs matching {job_pattern} have a change path rule.')
 
 
@@ -573,7 +572,7 @@ def gitlab_ci_jobs_codeowners(ctx, path_codeowners='.github/CODEOWNERS', all_fil
         _gitlab_ci_jobs_codeowners_lint(modified_yml_files, gitlab_owners)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(f'[{color_message("OK", Color.GREEN)}] All checked job files have a CODEOWNER defined in {path_codeowners}.')
 
 
@@ -605,7 +604,7 @@ def gitlab_ci_jobs_owners(ctx, diff_file=None, path_jobowners='.gitlab/JOBOWNERS
         check_owners_gitlab_ci_jobs(jobs, ci_linters_config, path_jobowners)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
         print(e.pretty_print())
-        sys.exit(1)
+        sys.exit(e.exit_code)
     print(f'[{color_message("OK", Color.GREEN)}] All checked jobs have an owner defined in {path_jobowners}.')
 
 
