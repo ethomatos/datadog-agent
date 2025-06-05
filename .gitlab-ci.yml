@@ -105,10 +105,11 @@ stages:
 
 test_job:
   stage: setup
-  image: registry.ddbuild.io/ci/datadog-agent-buildimages/deb_arm64$DATADOG_AGENT_BUILDIMAGES_SUFFIX:$DATADOG_AGENT_BUILDIMAGES
-  tags: ["arch:arm64"]
+  image: registry.ddbuild.io/ci/datadog-agent-buildimages/windows_ltsc2022_x64${CI_IMAGE_WIN_LTSC2022_X64_SUFFIX}:${CI_IMAGE_WIN_LTSC2022_X64}
+  tags: ["windows-v2:2022"]
   script:
-    - echo toto is $TOTO
+    - docker pull registry.ddbuild.io/ci/datadog-agent-buildimages/windows_ltsc2022_x64${CI_IMAGE_WIN_LTSC2022_X64_SUFFIX}:${CI_IMAGE_WIN_LTSC2022_X64}
+    - docker history registry.ddbuild.io/ci/datadog-agent-buildimages/windows_ltsc2022_x64${CI_IMAGE_WIN_LTSC2022_X64_SUFFIX}:${CI_IMAGE_WIN_LTSC2022_X64}
 
 variables:
   # Directory in which we execute the omnibus build.
