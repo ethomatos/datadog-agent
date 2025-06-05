@@ -116,7 +116,7 @@ func (v *baseStatusSuite) testDefaultInstallStatus(processAgentContain, processA
 			shouldNotContain: []string{"Error"},
 		},
 		{
-			name:            "APM Auto-Instrumentation",
+			name:            "APM Single Step Instrumentation",
 			shouldBePresent: true,
 		},
 		{

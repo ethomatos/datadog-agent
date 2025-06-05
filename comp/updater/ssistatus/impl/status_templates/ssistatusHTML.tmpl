@@ -1,13 +1,16 @@
 <div class="stat">
   <span class="stat_title">Fleet Automation</span>
   <span class="stat_data">
-     {{ with .ssiStatus }}{{ if .apmStatusNotAvailable }}APM status not available
-     {{ else }}{{ if .autoInstrumentationEnabled }}
-      APM SSI is installed. 
-      Instrumentation status:
-        {{ if .hostInstrumented }}Host:   Instrumented{{ else }}Host:   Not instrumented{{ end }}
-        {{ if .dockerInstrumented }}Docker: Instrumented{{ else }}Docker: Not instrumented{{ end }}
-      {{ else }}APM SSI is disabled.{{ end }}
-      {{ end }}{{ end }}
+        {{ with .ssiStatus -}}
+        {{ if .apmStatusNotAvailable }}APM Single Step Instrumentation status is not available
+        {{ else -}}{{ if .autoInstrumentationEnabled -}}
+        APM Single Step Instrumentation is enabled. 
+        {{ if gt (len .autoInstrumentationModes) 0 }}Instrumentation status:
+            {{ range .autoInstrumentationModes -}}
+                {{ formatTitle . }}: Instrumented
+            {{ end -}}
+        {{ end -}}
+        {{ else -}}APM Single Step Instrumentation is not enabled.{{ end -}}{{ end -}}
+        {{ end -}}
   </span>
 </div>

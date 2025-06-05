@@ -10,7 +10,6 @@ import (
 	"context"
 	"embed"
 	"io"
-	"slices"
 	"time"
 
 	log "github.com/DataDog/datadog-agent/comp/core/log/def"
@@ -91,12 +90,12 @@ func (c *ssiStatusComponent) Stop(_ context.Context) error {
 
 // Name renders the name
 func (c *ssiStatusComponent) Name() string {
-	return "APM Auto-Instrumentation"
+	return "APM Single Step Instrumentation"
 }
 
 // Section renders the section
 func (c *ssiStatusComponent) Section() string {
-	return "APM Auto-Instrumentation"
+	return "APM Single Step Instrumentation"
 }
 
 // JSON renders the JSON
@@ -117,13 +116,12 @@ func (c *ssiStatusComponent) HTML(_ bool, buffer io.Writer) error {
 
 func (c *ssiStatusComponent) populateStatus(stats map[string]interface{}) {
 	autoInstrumentationEnabled, instrumentationModes, err := c.autoInstrumentationStatus()
-	ssiStatus := make(map[string]bool)
+	ssiStatus := make(map[string]interface{})
 	if err == nil {
 		ssiStatus["apmStatusNotAvailable"] = false
 		if autoInstrumentationEnabled {
 			ssiStatus["autoInstrumentationEnabled"] = true
-			ssiStatus["hostInstrumented"] = slices.Contains(instrumentationModes, "host")
-			ssiStatus["dockerInstrumented"] = slices.Contains(instrumentationModes, "docker")
+			ssiStatus["autoInstrumentationModes"] = instrumentationModes
 		} else {
 			ssiStatus["autoInstrumentationEnabled"] = false
 		}
