@@ -202,7 +202,6 @@ def github_actions_shellcheck(
     exclude=DEFAULT_SHELLCHECK_EXCLUDES,
     shellcheck_args="",
     fail_fast=False,
-    use_bat=None,
     only_errors=False,
     all_files=False,
 ):
@@ -239,7 +238,7 @@ def github_actions_shellcheck(
                     script = '#!/bin/bash\n' + script.strip() + '\n'
                     scripts[f'{file.removeprefix(".github/workflows/")}-{job_name}-{step_name}'] = script
 
-    shellcheck_linter(ctx, scripts, exclude, shellcheck_args, fail_fast, use_bat, only_errors)
+    shellcheck_linter(ctx, scripts, exclude, shellcheck_args, fail_fast, only_errors)
 
 
 # === GITLAB === #
@@ -256,7 +255,6 @@ def full_gitlab_ci(
     shellcheck_verbose: bool = False,
     shellcheck_args: str = "",
     shellcheck_fail_fast: bool = False,
-    shellcheck_use_bat: str | None = None,
     shellcheck_only_errors: bool = False,
     path_jobowners: str = '.gitlab/JOBOWNERS',
 ):
@@ -271,7 +269,6 @@ def full_gitlab_ci(
         shellcheck_exclude: A comma separated list of shellcheck error codes to exclude.
         shellcheck_shellcheck_args: Additional arguments to pass to shellcheck.
         shellcheck_fail_fast: If True, will stop at the first shellcheck error.
-        shellcheck_use_bat: If True (or None), will (try to) use bat to display the shellcheck results.
         shellcheck_only_errors: Show only shellcheck errors, not warnings.
         path_jobowners: Path to a JOBOWNERS file defining which jobs are owned by which teams
     """
@@ -306,7 +303,6 @@ def full_gitlab_ci(
         verbose=shellcheck_verbose,
         shellcheck_args=shellcheck_args,
         fail_fast=shellcheck_fail_fast,
-        use_bat=shellcheck_use_bat,
         only_errors=shellcheck_only_errors,
     )
     check_change_paths_valid_gitlab_ci_jobs(changed_jobs)
@@ -343,8 +339,8 @@ def gitlab_ci(ctx, configs_file: str | None = None, input_file=".gitlab-ci.yml",
     try:
         lint_and_test_gitlab_ci_config(configs, test=test, custom_context=custom_context)
     except (GitlabLintFailure, MultiGitlabLintFailure) as e:
-        # If we have a failure, we print the details and exit with an error code
         print(e.pretty_print())
+        # TODO[@Ishirui]: Don't exit when only warnings are found
         sys.exit(1)
 
     print(f'[{color_message("OK", Color.GREEN)}] All contexts tested successfully.')
@@ -358,7 +354,6 @@ def gitlab_ci_shellcheck(
     verbose: bool = False,
     shellcheck_args="",
     fail_fast: bool = False,
-    use_bat: str | None = None,
     only_errors: bool = False,
 ):
     """Verifies that shell scripts with gitlab config are valid.
@@ -369,7 +364,6 @@ def gitlab_ci_shellcheck(
         exclude: A comma separated list of shellcheck error codes to exclude.
         shellcheck_args: Additional arguments to pass to shellcheck.
         fail_fast: If True, will stop at the first error.
-        use_bat: If True (or None), will (try to) use bat to display the script.
         only_errors: Show only errors, not warnings.
     """
 
@@ -380,16 +374,20 @@ def gitlab_ci_shellcheck(
     if not jobs:
         return
 
-    shellcheck_gitlab_ci_jobs(
-        ctx,
-        jobs,
-        exclude=exclude,
-        verbose=verbose,
-        shellcheck_args=shellcheck_args,
-        fail_fast=fail_fast,
-        use_bat=use_bat,
-        only_errors=only_errors,
-    )
+    try:
+        shellcheck_gitlab_ci_jobs(
+            ctx,
+            jobs,
+            exclude=exclude,
+            verbose=verbose,
+            shellcheck_args=shellcheck_args,
+            fail_fast=fail_fast,
+            only_errors=only_errors,
+        )
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(f'[{color_message("OK", Color.GREEN)}] Shellcheck passed for all gitlab ci jobs.')
 
 
 ## === SSM-related === ##
@@ -474,8 +472,14 @@ def gitlab_change_paths(ctx, diff_file=None):
     if not jobs:
         return
 
-    check_change_paths_valid_gitlab_ci_jobs(jobs)
-    print(f"All rule:changes:paths from gitlab-ci are {color_message('valid', Color.GREEN)}.")
+    try:
+        check_change_paths_valid_gitlab_ci_jobs(jobs)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(
+        f"[{color_message('OK', Color.GREEN)}] All rule:changes:paths from gitlab-ci are {color_message('valid', Color.GREEN)}."
+    )
 
 
 @task
@@ -505,7 +509,12 @@ def gitlab_ci_jobs_needs_rules(ctx, diff_file=None):
         all_jobs=full_config_get_all_leaf_jobs(full_config),
         all_stages=full_config_get_all_stages(full_config),
     )
-    check_needs_rules_gitlab_ci_jobs(jobs, ci_linters_config)
+    try:
+        check_needs_rules_gitlab_ci_jobs(jobs, ci_linters_config)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(f'[{color_message("OK", Color.GREEN)}] All checked jobs haeve a `needs` and `rules` tag.')
 
 
 @task
@@ -524,7 +533,12 @@ def job_change_path(ctx, configs_file: str | None = None, job_pattern: str = ".*
     jobs = extract_gitlab_ci_jobs(configs=configs)
     compiled_job_pattern = re.compile(job_pattern)
     jobs = [(job_name, job) for (job_name, job) in jobs if re.match(compiled_job_pattern, job_name)]
-    check_change_paths_exist_gitlab_ci_jobs(jobs)
+    try:
+        check_change_paths_exist_gitlab_ci_jobs(jobs)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(f'[{color_message("OK", Color.GREEN)}] All jobs matching {job_pattern} have a change path rule.')
 
 
 ## === Job ownership === ##
@@ -555,7 +569,12 @@ def gitlab_ci_jobs_codeowners(ctx, path_codeowners='.github/CODEOWNERS', all_fil
     parsed_owners = [line for line in parsed_owners if '/.gitlab/' in line]
     gitlab_owners = CodeOwners('\n'.join(parsed_owners))
 
-    _gitlab_ci_jobs_codeowners_lint(path_codeowners, modified_yml_files, gitlab_owners)
+    try:
+        _gitlab_ci_jobs_codeowners_lint(modified_yml_files, gitlab_owners)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(f'[{color_message("OK", Color.GREEN)}] All checked job files have a CODEOWNER defined in {path_codeowners}.')
 
 
 @task
@@ -582,7 +601,12 @@ def gitlab_ci_jobs_owners(ctx, diff_file=None, path_jobowners='.gitlab/JOBOWNERS
         all_stages=full_config_get_all_stages(full_config),
     )
 
-    check_owners_gitlab_ci_jobs(jobs, ci_linters_config, path_jobowners)
+    try:
+        check_owners_gitlab_ci_jobs(jobs, ci_linters_config, path_jobowners)
+    except (GitlabLintFailure, MultiGitlabLintFailure) as e:
+        print(e.pretty_print())
+        sys.exit(1)
+    print(f'[{color_message("OK", Color.GREEN)}] All checked jobs have an owner defined in {path_jobowners}.')
 
 
 # === MISC === #
