@@ -30,8 +30,8 @@ from tasks.libs.common.git import get_common_ancestor, get_default_branch, get_f
 from tasks.libs.common.utils import gitlab_section, is_pr_context, running_in_ci
 from tasks.libs.linter.gitlab import (
     _gitlab_ci_jobs_codeowners_lint,
-    check_change_paths_gitlab_ci_config,
-    check_change_paths_gitlab_ci_jobs,
+    check_change_paths_exist_gitlab_ci_jobs,
+    check_change_paths_valid_gitlab_ci_jobs,
     check_needs_rules_gitlab_ci_jobs,
     check_owners_gitlab_ci_jobs,
     extract_gitlab_ci_jobs,
@@ -308,8 +308,8 @@ def full_gitlab_ci(
         use_bat=shellcheck_use_bat,
         only_errors=shellcheck_only_errors,
     )
-    check_change_paths_gitlab_ci_jobs(changed_jobs)
-    check_change_paths_gitlab_ci_config(changed_jobs)
+    check_change_paths_valid_gitlab_ci_jobs(changed_jobs)
+    check_change_paths_exist_gitlab_ci_jobs(changed_jobs)
 
     ci_linters_config = CILintersConfig(
         lint=True,
@@ -466,7 +466,7 @@ def gitlab_change_paths(ctx, diff_file=None):
     if not jobs:
         return
 
-    check_change_paths_gitlab_ci_jobs(jobs)
+    check_change_paths_valid_gitlab_ci_jobs(jobs)
     print(f"All rule:changes:paths from gitlab-ci are {color_message('valid', Color.GREEN)}.")
 
 
@@ -516,7 +516,7 @@ def job_change_path(ctx, configs_file: str | None = None, job_pattern: str = ".*
     jobs = extract_gitlab_ci_jobs(configs=configs)
     compiled_job_pattern = re.compile(job_pattern)
     jobs = [(job_name, job) for (job_name, job) in jobs if re.match(compiled_job_pattern, job_name)]
-    check_change_paths_gitlab_ci_config(jobs)
+    check_change_paths_exist_gitlab_ci_jobs(jobs)
 
 
 ## === Job ownership === ##

@@ -104,7 +104,7 @@ def shellcheck_gitlab_ci_jobs(
     shellcheck_linter(ctx, scripts, exclude, shellcheck_args, fail_fast, use_bat, only_errors)
 
 
-def check_change_paths_gitlab_ci_jobs(jobs: list[tuple[str, dict]]):
+def check_change_paths_valid_gitlab_ci_jobs(jobs: list[tuple[str, dict]]):
     """Verifies that rules: changes: paths in the given jobs match existing files in the repo"""
     error_paths = []
     for _, job in jobs:
@@ -118,7 +118,7 @@ def check_change_paths_gitlab_ci_jobs(jobs: list[tuple[str, dict]]):
         )
 
 
-def check_change_paths_gitlab_ci_config(jobs: list[tuple[str, dict[str, Any]]]):
+def check_change_paths_exist_gitlab_ci_jobs(jobs: list[tuple[str, dict[str, Any]]]):
     """Verifies that the jobs passed in contain a change path rule in the given config."""
     tests_without_change_path_allow_list = {
         'generate-fips-e2e-pipeline',
