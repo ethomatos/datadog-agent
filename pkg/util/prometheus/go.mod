@@ -1,6 +1,6 @@
 module github.com/DataDog/datadog-agent/pkg/util/prometheus
 
-go 1.24.0
+go 1.26.6
 
 require github.com/prometheus/common v0.62.0
 
